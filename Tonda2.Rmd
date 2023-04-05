@@ -1,0 +1,322 @@
+---
+title: "Untitled"
+author: "Ismael Soto"
+date: "10/2/2023"
+output: html_document
+---
+
+## Just to be sure that the methodology is correct: 
+# The experiment set up is:
+3 crayfish: "G", "N" and "E".
+Length: 16-21 mm
+
+#Summary of the experiment (1)
+We evaluate the consumption rate of crayfish under six levels of prey density: (1, 3, 6, 12, 18)
+
+```{r}
+suppressMessages({
+  library(dplyr, quiet = TRUE, warn.conflicts = FALSE)
+  library(reshape, quiet = TRUE, warn.conflicts = FALSE)
+  library(ggplot2)
+  library(stringr)
+  library(tidyr)  
+  library(stringr)
+  library(readxl)
+  library(frair)
+  library(patchwork)
+  library(glmmTMB)
+})
+```
+
+```{r}
+setwd("C:/Users/isma-/OneDrive/Escritorio/Tonda")
+df <- read_excel("Tonda_student.xlsx", sheet = "Ismael")
+```
+
+```{r}
+df[is.na(df)] <- 0
+```
+```{r}
+df1<- df[,c(1:11)] #Group Non-reproductive
+df2<- df[,c(2,12:20)] #Group Glands
+df3<- df[,c(2,21:29)] #Group Eggs
+```
+
+
+```{r}
+frair_test(formula = Total  ~  `Prey density` , data = df1) 
+```
+
+```{r}
+frair_test(formula = Total1  ~  `Prey density` , data = df2)
+```
+
+
+```{r}
+frair_test(formula = Total2  ~  `Prey density` , data = df3) 
+```
+
+## Result
+All the crayfish groups follows a type-II response
+
+Example: https://en.wikipedia.org/wiki/Functional_response
+
+
+
+#Functional response analyse
+#a: attack rate
+#h: handling time
+#T: time exp
+```{r }
+g_fit1 <- frair_fit(formula = Total ~ `Prey density`, data = df1,
+                   response = "rogersII",
+                   start = list(a = 1, h = 0.1),
+                   fixed = list(T = 1)) 
+with(df1, plot(`Prey density`, Total, xlab="Prey Density",
+                    ylab="No. Prey Eaten"))
+lines(g_fit1, lty = 1, col = "grey25")
+print(g_fit1)
+summary(g_fit1$fit)
+```
+
+
+
+```{r }
+g_fit2 <- frair_fit(formula = Total1 ~ `Prey density`, data = df2,
+                   response = "rogersII",
+                   start = list(a = 1, h = 0.1),
+                   fixed = list(T = 1)) #days
+with(df2, plot(`Prey density`, Total1, xlab="Prey Density",
+                    ylab="No. Prey Eaten"))
+lines(g_fit2, lty = 1, col = "grey55")
+print(g_fit2)
+summary(g_fit2$fit)
+```
+
+```{r}
+g_fit3 <- frair_fit(formula = Total2 ~ `Prey density`, data = df3,
+                   response = "rogersII",
+                   start = list(a = 1, h = 0.1),
+                   fixed = list(T = 1)) #days
+with(df3, plot(`Prey density`, Total2, xlab="Prey Density",
+                    ylab="No. Prey Eaten"))
+lines(g_fit3, lty = 1, col = "grey55")
+print(g_fit3)
+summary(g_fit3$fit)
+```
+
+```{r}
+fitp_fit1 <- frair_boot(g_fit1)
+confint(fitp_fit1 , citypes ='bca')
+```
+
+```{r}
+fitp_fit2 <- frair_boot(g_fit2)
+confint(fitp_fit2 , citypes ='bca')
+```
+
+```{r}
+fitp_fit3 <- frair_boot(g_fit3)
+confint(fitp_fit3 , citypes ='bca')
+```
+
+## PLOT
+```{r}
+#svg("Figure1.svg")
+plot(x = 1,
+     type = "n",
+     xlim = c(0, 26), 
+     ylim = c(0, 20),
+     xlab="Prey Density", ylab="No. of prey killed")
+
+
+drawpoly(fitp_fit1, col=("royalblue1"), border=NA, tozero=TRUE)
+drawpoly(fitp_fit2, col=("palegreen2"), border=NA, tozero=TRUE)
+drawpoly(fitp_fit3, col=("orangered1"), border=NA, tozero=TRUE)
+
+points(x = df2$`Prey density`, y = df2$Total1, pch="+", cex=0.9, col= "palegreen2",alpha = 0.5)
+points(x = df3$`Prey density`, y = df3$Total2, pch="x", cex=0.7, col= "orangered1",alpha = 0.5)
+points(x = df1$`Prey density`, y = df1$Total, pch="*", cex=0.9, col = "royalblue1",alpha = 0.5)
+
+lines(g_fit1, col = "royalblue1", lty=1, lwd=3) ##Group Non-reproductive
+lines(g_fit2, col = "palegreen2",lty=2,  lwd=3 ) #Glands
+lines(g_fit3, col = "orangered1",lty=3,  lwd=3 ) #Eggs
+
+legend(1, 19, legend=c("No reproductive", "Glair glands","Eggs"),
+       col=c("royalblue1", "palegreen2","orangered1"), lty=1:2, cex=0.8)
+
+dev.off()
+```
+
+
+### Check the attack rate (a) and handling time (h) through error bars from bootstraps
+
+```{r}
+########### Ahora plot boxplots
+
+a<- fitp_fit1$bootcoefs %>% as.data.frame() %>% mutate(Lower="2.883",
+                                                       Upper="8.81",
+                                                       point="4.600") 
+a$Clawless <- "No reproductive"
+b<- fitp_fit2$bootcoefs %>% as.data.frame()%>% mutate(Lower="1.372",
+                                                      Upper="4.322",
+                                                      point="2.447")
+b$Clawless <- "Glair glands"
+c<- fitp_fit3$bootcoefs %>% as.data.frame()%>% mutate(Lower="0.25",
+                                                      Upper="7.863",
+                                                      point="1.044")
+c$Clawless <- "Eggs"
+
+df<- bind_rows(a,b,c)
+str(df)
+
+str(df)
+df$Lower<- as.numeric(df$Lower)
+df$Upper<- as.numeric(df$Upper)
+df$point<- as.numeric(df$point)
+
+df$Clawless <- factor(df$Clawless, 
+          levels = c("No reproductive","Glair glands","Eggs"))
+
+df <- df[!duplicated(df$Clawless),]
+
+#svg("p1.svg")
+p<- ggplot(df, aes(Clawless,a,colour = Clawless)) 
+p1<- p + geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2) +theme_bw() + ylab("Attack rate (± SE)")+
+  ylim(0,10)+ geom_point(data=df,aes(Clawless,point)) +xlab("")
+p1
+dev.off()
+```
+
+```{r}
+d<- fitp_fit1$bootcoefs %>% as.data.frame() %>% mutate(Lower="0.101",
+                                                       Upper="0.146",
+                                                       point="0.121") 
+d$Clawless <- "No reproductive"
+e<- fitp_fit2$bootcoefs %>% as.data.frame()%>% mutate(Lower="0.164",
+                                                      Upper="0.281",
+                                                      point="0.224")
+e$Clawless <- "Glair glands"
+f<- fitp_fit3$bootcoefs %>% as.data.frame()%>% mutate(Lower="0.482",
+                                                      Upper="1.145",
+                                                      point="0.764")
+f$Clawless <- "Eggs"
+
+df1<- bind_rows(d,e,f)
+str(df1)
+
+str(df1)
+df1$Lower<- as.numeric(df1$Lower)
+df1$Upper<- as.numeric(df1$Upper)
+df1$point<- as.numeric(df1$point)
+
+df1$Clawless <- factor(df1$Clawless, 
+          levels = c("No reproductive","Glair glands","Eggs"))
+
+df1 <- df1[!duplicated(df1$Clawless),]
+
+
+svg("p2.svg")
+p<- ggplot(df1, aes(Clawless,h,colour = Clawless)) 
+p2<-p + geom_errorbar(aes(ymin = Lower, ymax = Upper), width = 0.2) +theme_bw() + 
+  ylab("Handling time (± SE)") + geom_point(data=df,aes(Clawless,point))+ylim(0,1.2)+
+  xlab("")
+
+p2
+dev.off()
+```
+
+```{r}
+p1+p2
+```
+
+## Partial consumption of prey
+
+
+```{r}
+setwd("C:/Users/isma-/OneDrive/Escritorio/Tonda")
+df <- read_excel("Tonda_student.xlsx", sheet = "Ismael")
+head(df)
+```
+
+
+```{r}
+df[is.na(df)] <- 0
+```
+
+```{r}
+df1<- df[,c(1:10)] #Group Non-reproductive
+df1 <- df1[,-1]
+df2<- df[,c(2,11:18)] #Group eggs
+df3<- df[,c(2,19:26)] #Group glands
+```
+
+```{r}
+names<- colnames(df1)
+colnames(df2)<- names
+colnames(df3)<- names
+```
+
+
+```{r}
+df<- rbind(df1,df2,df3)
+```
+
+
+```{r}
+colnames(df)
+colnames(df) <- c("Prey density","Code","Alive","1","0.75","0.5","0.25","0","Total")
+
+df<- df %>% pivot_longer(!c(Code,`Prey density`,`1`,`0`, Alive, Total), 
+                         names_to = "Partial_consumend", values_to = "Partial")
+
+
+df$Code <- as.factor(df$Code)
+head(df)
+```
+
+
+```{r}
+df$all_consumed <- df$`1` + df$`0`
+
+
+### Zero inflated because there are mannnnnnnnnnnny 0 (more than expected)
+head(df)
+str(df)
+hist(df$Partial)
+```
+
+```{r}
+model1 <- glmmTMB(cbind(Partial, all_consumed) ~ Code*`Prey density`, ziformula = ~1,
+                  data = df, family = binomial(link = "logit"))
+
+summary(model1)
+
+```
+
+```{r}
+library(car)
+result<-car::Anova(model1, Type=3)
+result
+
+library(lsmeans)
+lsmeans(model1,pairwise~Code,data=df) 
+```
+
+## :DD
+```{r}
+setwd("C:/Users/isma-/OneDrive/Escritorio/Tonda")
+df <- read_excel("Tonda_student.xlsx", sheet = "Sheet4")
+head(df)
+```
+
+```{r}
+svg("Figure3.svg")
+ggplot(df,  aes(x = Prey_density, y = Average, ymin = Average-SD, ymax = Average+SD))+
+ geom_pointrange(aes(color = Group), position = position_dodge(width = 2)) + theme_bw()+ ylab("Prey partially consumed") +
+  scale_x_discrete(name ="Prey density", 
+                    limits=c("1","3","6","12","18","24"))
+dev.off()
+```
+
+
